@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+
+{% block title %}Inscription{% endblock %}
+
+{% block content %}
+    <h2>Inscription</h2>
+    <form method="POST" action="{{ url_for('auth.register') }}">
+        <label for="username">Nom d'utilisateur :</label>
+        <input type="text" name="username" required>
+
+        <label for="password">Mot de passe :</label>
+        <input type="password" name="password" required>
+
+        <label>Données faciales :</label>
+        <video id="webcam" autoplay></video>
+        <button type="button" id="capture-btn">Capturer</button>
+        <canvas id="canvas" style="display: none;"></canvas>
+        <input type="hidden" name="face_data" id="face_image">
+        <p id="status-message" style="color: green;"></p>
+
+        <button type="submit">S'inscrire</button>
+    </form>
+    <a href="{{ url_for('auth.login') }}">Déjà inscrit ? Connectez-vous</a>
+
+    <script defer src="{{ url_for('static', filename='js/face_capture.js') }}"></script>
+{% endblock %}
