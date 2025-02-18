@@ -2,30 +2,35 @@ from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from app.database import get_db_connection
 import base64
+import numpy as np
 
 
 class User(UserMixin):
-    def __init__(self, id, username, password, face_data, face_verified=False):
+    def __init__(self, id, username, password, face_data=None, face_verified=False):
         self.id = id
         self.username = username
         self.password = password
         self.face_data = face_data
         self.face_verified = face_verified  # Champ pour la vérification faciale
 
+    def save(self):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO users (username, password, face_data) VALUES (%s, %s, %s)",
+                       (self.username, self.password, self.face_data))
+        conn.commit()
+        conn.close()
+    
     @staticmethod
-    def create_user(username, password, face_data):
+    def create_user(username, password, face_encoding):
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # 🔹 Hasher le mot de passe
         hashed_password = generate_password_hash(password)
-
-        # 🔹 Encoder face_data en base64 + utf-8
-        face_data_encoded = base64.b64encode(face_data.encode('utf-8')).decode('utf-8')
 
         cursor.execute(
             "INSERT INTO users (username, password, face_data) VALUES (%s, %s, %s)",
-            (username, hashed_password, face_data_encoded)
+            (username, hashed_password, face_encoding)
         )
         conn.commit()
         conn.close()
@@ -39,13 +44,28 @@ class User(UserMixin):
         conn.close()
 
         if user_data:
-            # Créer une instance de User avec les données récupérées
             user = User(**user_data)
-            # Décoder 'face_data' si nécessaire
+
+            # 🔹 Vérifier si `face_data` existe
             if user.face_data:
-                user.face_data = base64.b64decode(user.face_data).decode('utf-8')
+                try:
+                    # 🔹 Décoder la base64 → bytes
+                    face_bytes = base64.b64decode(user.face_data)
+
+                    # 🔹 Vérifier la taille pour éviter `ValueError`
+                    if len(face_bytes) % 8 == 0:  # np.float64 = 8 octets
+                        user.face_data = np.frombuffer(face_bytes, dtype=np.float64)
+                    else:
+                        print("⚠️ Warning: face_bytes size incorrect, conversion skipped!")
+                        user.face_data = None
+
+                except Exception as e:
+                    print(f"❌ Erreur lors de la conversion des données faciales : {e}")
+                    user.face_data = None  # Evite une erreur dans le code
+
             return user
         return None
+
 
     def check_password(self, password):
         return check_password_hash(self.password, password)

@@ -8,6 +8,7 @@ login_manager = LoginManager()
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+    app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # 🔥 Augmenter à 2MB
 
     login_manager.init_app(app)
     login_manager.login_view = "auth.login"  

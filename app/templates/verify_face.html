@@ -5,96 +5,66 @@
     <h2>Vérification Faciale</h2>
 
     {% if current_user.face_verified %}
-        <p>Votre visage est déjà vérifié.</p>
+        <p>✅ Votre visage est déjà vérifié.</p>
         <a href="{{ url_for('auth.dashboard') }}" class="btn btn-primary">Accéder au tableau de bord</a>
     {% else %}
-        <p>Veuillez effectuer la vérification faciale ci-dessous.</p>
+        <p>📷 Veuillez effectuer la vérification faciale ci-dessous.</p>
 
         <div class="video-container">
             <video id="webcam" autoplay></video>
             <canvas id="canvas" style="display:none;"></canvas>
         </div>
 
-        <button id="capture-btn" class="btn btn-primary" disabled>Capturer</button>
+        <button id="capture-btn" class="btn btn-primary">📸 Capturer</button>
+        <p id="status-message"></p>
 
-        <form id="verify-form" method="POST" action="{{ url_for('auth.verify_face_route') }}" style="display: none;">
-            <input type="hidden" id="face_image" name="face_data">
-            <button type="submit" class="btn btn-success">Soumettre la vérification</button>
-        </form>
+        <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const video = document.getElementById("webcam");
+            const captureBtn = document.getElementById("capture-btn");
+            const statusMessage = document.getElementById("status-message");
+            const canvas = document.getElementById("canvas");
+            const context = canvas.getContext("2d");
+
+            // 📷 Activer la webcam
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(stream => { video.srcObject = stream; })
+                .catch(err => { console.error("❌ Erreur caméra :", err); });
+
+            // 📸 Capture et envoi de l’image
+            captureBtn.addEventListener("click", function () {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                const imageData = canvas.toDataURL("image/jpeg"); // Convertir en base64
+                
+                statusMessage.innerText = "🔄 Vérification en cours...";
+
+                // Envoi de l’image en AJAX
+                fetch("{{ url_for('auth.verify_face_route') }}", {
+                    method: "POST",
+                    body: JSON.stringify({ face_data: imageData }),  // Envoi de l'image encodée en base64
+                    headers: { 
+                        "Content-Type": "application/json"  // Assurer JSON correct
+                    }
+                })
+                .then(response => response.json())  // Récupérer réponse JSON
+                .then(data => {
+                    console.log("Réponse du serveur :", data);  // 🔥 Debug Console
+                    statusMessage.innerText = data.message;
+                    if (data.success) {
+                        window.location.href = "{{ url_for('auth.dashboard') }}";
+                    }
+                })
+                .catch(err => { 
+                    console.error("❌ Erreur requête :", err); // 🔥 Debug Console
+                    statusMessage.innerText = "Erreur lors de la vérification."; 
+                });
+
+            });
+        });
+        </script>
     {% endif %}
 </div>
-
-<script src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
-
-<script>
-document.addEventListener("DOMContentLoaded", async function () {
-    const video = document.getElementById("webcam");
-    const captureBtn = document.getElementById("capture-btn");
-    const faceInput = document.getElementById("face_image");
-    const verifyForm = document.getElementById("verify-form");
-
-    // 🔄 Charger les modèles directement en local
-    async function loadModels() {
-        try {
-            console.log("🔄 Chargement des modèles avec Tiny Face Detector...");
-            
-            // Charger Tiny Face Detector au lieu de SSD Mobilenet
-            await faceapi.nets.tinyFaceDetector.loadFromUri('/app/static/models/tiny_face_detector');
-            await faceapi.nets.faceLandmark68Net.loadFromUri('/app/static/models/face_landmark_68');
-            await faceapi.nets.faceRecognitionNet.loadFromUri('/app/static/models/face_recognition');
-
-            console.log("✅ Modèles chargés avec succès !");
-        } catch (error) {
-            console.error("❌ Erreur lors du chargement des modèles :", error);
-            alert("Impossible de charger les modèles de reconnaissance faciale.");
-        }
-    }
-
-    await loadModels();
-
-    // 📷 Activer la webcam
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        video.srcObject = stream;
-        console.log("🎥 Caméra activée !");
-    } catch (err) {
-        console.error("❌ Erreur d'accès à la caméra :", err);
-        alert("Impossible d'accéder à la caméra. Vérifiez vos permissions.");
-        return;
-    }
-
-    // 🔍 Vérification faciale en temps réel
-    setInterval(async () => {
-        if (video.readyState !== 4) return; // Vérifie si la vidéo est prête
-
-        const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
-            .withFaceLandmarks()
-            .withFaceDescriptor();
-
-        if (detection) {
-            captureBtn.disabled = false;
-            console.log("🙂 Visage détecté !");
-        } else {
-            captureBtn.disabled = true;
-        }
-    }, 500);
-
-    // 📸 Capture et soumission
-    captureBtn.addEventListener("click", async function () {
-        const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
-            .withFaceLandmarks()
-            .withFaceDescriptor();
-
-        if (detection) {
-            faceInput.value = JSON.stringify(detection.descriptor); // Stocker les données faciales
-            verifyForm.style.display = "block";
-            console.log("✅ Visage capturé !");
-        } else {
-            alert("Aucun visage détecté, essayez encore.");
-        }
-    });
-
-});
-</script>
-
 {% endblock %}

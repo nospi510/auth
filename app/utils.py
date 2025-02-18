@@ -56,62 +56,41 @@ def capture_face():
     return None
 
 
-def get_face_data(username):
-    """ Récupère les données faciales stockées en base de données """
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT face_data FROM users WHERE username = %s", (username,))
-    user = cursor.fetchone()
-    conn.close()
-
-    if user and user["face_data"]:
-        # Convertir les données en tableau numpy
-        try:
-            return np.frombuffer(user["face_data"].encode('utf-8'), dtype=np.float64)
-        except ValueError:
-            print("❌ Erreur : Données faciales corrompues.")
-            return None
-    return None
-
-def process_face_encoding(image_base64):
-    """ Convertir une image base64 en encodage faciale. """
+def process_face_encoding(face_data):
+    """ Convertit une image base64 en encodage facial """
     try:
-        # 🔹 Décoder l’image base64
-        image_data = base64.b64decode(image_base64.split(",")[1])
-        np_arr = np.frombuffer(image_data, dtype=np.uint8)
-        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        # 🔹 Décoder l'image base64 en bytes
+        img_bytes = base64.b64decode(face_data)
 
-        # 🔹 Convertir BGR → RGB
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        # 🔹 Convertir en numpy array
+        np_arr = np.frombuffer(img_bytes, dtype=np.uint8)
 
-        # 🔹 Détecter et encoder le visage
-        face_locations = face_recognition.face_locations(rgb_frame)
-        if not face_locations:
+        # 🔹 Lire l'image avec OpenCV
+        img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+        if img is None:
+            print("❌ Impossible de décoder l'image")
             return None
 
-        face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
-        return face_encodings[0] if face_encodings else None
+        # 🔹 Convertir BGR (OpenCV) → RGB (face_recognition)
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
+        # 🔹 Détecter les visages et extraire l'encodage
+        face_encodings = face_recognition.face_encodings(img_rgb)
+
+        if len(face_encodings) > 0:
+            return face_encodings[0]  # Retourne le premier encodage facial
+        else:
+            print("❌ Aucun visage détecté")
+            return None
     except Exception as e:
-        print(f"Erreur encodage faciale : {e}")
+        print(f"❌ Erreur encodage facial: {e}")
         return None
 
 
-def verify_face(username=None):
-    """ Compare le visage capturé avec celui enregistré en base """
-    if username is None:
-        username = current_user.username
-
-    stored_face_encoding = get_face_data(username)
-
-    if stored_face_encoding is None:
-        return False, "Aucune donnée faciale enregistrée."
-
-    captured_face_encoding = capture_face()
-    if captured_face_encoding is None:
-        return False, "Aucun visage détecté pendant la capture."
-
-    # Comparaison des visages
-    matches = face_recognition.compare_faces([stored_face_encoding], captured_face_encoding)
-
-    return (True, "Reconnaissance faciale réussie!") if matches[0] else (False, "Échec de la reconnaissance faciale.")
+def get_face_data(username):
+    """ Récupère les données faciales d’un utilisateur enregistré """
+    user = User.query.filter_by(username=username).first()
+    if user and user.face_data:
+        return np.array(eval(user.face_data))  # Convertir string en array
+    return None
